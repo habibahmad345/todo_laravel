@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import 'history_page.dart';
 import '../../cores/constants.dart';
 import '../../models/task.dart';
 import '../../services/api_services.dart';
@@ -27,37 +27,105 @@ class TasksPageState extends State<TasksPage> {
     _future = ApiService.fetchTasks();
   }
 
-  void _reload() => setState(() => _future = ApiService.fetchTasks());
+  void reload() => setState(() => _future = ApiService.fetchTasks());
 
   Future<void> _complete(Task t) async {
     await ApiService.completeTask(t.id);
-    _reload();
+    reload();
   }
 
-  Future<void> addTask() async {
-    final controller = TextEditingController();
-    final title = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
+ Future<void> addTask() async {
+  final controller = TextEditingController();
+  DateTime date = DateTime.now();
+  TimeOfDay? time;
+  String category = _category == 'Personal' ? 'Personal' : 'Work';
+
+  String two(int n) => n.toString().padLeft(2, '0');
+
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setD) => AlertDialog(
         title: const Text('Tugas baru'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'Judul tugas'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: controller,
+                autofocus: true,
+                decoration: const InputDecoration(hintText: 'Judul tugas'),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.calendar_today_outlined),
+                title: Text('${two(date.day)}-${two(date.month)}-${date.year}'),
+                onTap: () async {
+                  final p = await showDatePicker(
+                    context: ctx,
+                    initialDate: date,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2100),
+                  );
+                  if (p != null) setD(() => date = p);
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.alarm),
+                title: Text(time == null
+                    ? 'Tanpa pengingat'
+                    : '${two(time!.hour)}:${two(time!.minute)}'),
+                trailing: time == null
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => setD(() => time = null),
+                      ),
+                onTap: () async {
+                  final p = await showTimePicker(
+                    context: ctx,
+                    initialTime: time ?? TimeOfDay.now(),
+                  );
+                  if (p != null) setD(() => time = p);
+                },
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'Work', label: Text('Work')),
+                  ButtonSegment(value: 'Personal', label: Text('Personal')),
+                ],
+                selected: {category},
+                onSelectionChanged: (s) => setD(() => category = s.first),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
           FilledButton(
-              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+              onPressed: () => Navigator.pop(ctx, true),
               child: const Text('Simpan')),
         ],
       ),
-    );
-    if (title == null || title.isEmpty) return;
-    await ApiService.addTask(title, _category == 'Personal' ? 2 : 1);
-    _reload();
-  }
+    ),
+  );
+
+  final title = controller.text.trim();
+  if (ok != true || title.isEmpty) return;
+
+  await ApiService.addTask(
+    title: title,
+    date: date,
+    time: time == null ? null : '${two(time!.hour)}:${two(time!.minute)}',
+    categoryId: category == 'Personal' ? 2 : 1,
+  );
+  reload();
+}
 
   Widget _categoryBar() {
     return Padding(
@@ -109,7 +177,7 @@ class TasksPageState extends State<TasksPage> {
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (v) {
-              if (v == 'refresh') _reload();
+              if (v == 'refresh') reload();
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'refresh', child: Text('Muat ulang')),
@@ -257,44 +325,46 @@ class TasksPageState extends State<TasksPage> {
     );
   }
 
-  Widget _historyCard(int total) {
-    return GestureDetector(
-      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Halaman riwayat belum dibuat'))),
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 20, 16, 100),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-            color: Colors.white, borderRadius: BorderRadius.circular(16)),
-        child: Row(
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(14)),
-              child: const Icon(Icons.history, color: Colors.green, size: 30),
+  Widget _historyCard(List<Task> done) {
+  return GestureDetector(
+    onTap: () => Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => HistoryPage(tasks: done)),
+    ),
+    child: Container(
+      margin: const EdgeInsets.fromLTRB(16, 20, 16, 100),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+          color: Colors.white, borderRadius: BorderRadius.circular(16)),
+      child: Row(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(14)),
+            child: const Icon(Icons.history, color: Colors.green, size: 30),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Lihat riwayat lengkap',
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                Text('${done.length} menyelesaikan tugas',
+                    style: TextStyle(color: Colors.grey.shade600)),
+              ],
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Lihat riwayat lengkap',
-                      style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w800)),
-                  Text('$total menyelesaikan tugas',
-                      style: TextStyle(color: Colors.grey.shade600)),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right),
-          ],
-        ),
+          ),
+          const Icon(Icons.chevron_right),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _taskList() {
     return FutureBuilder<List<Task>>(
@@ -313,11 +383,12 @@ class TasksPageState extends State<TasksPage> {
         }
 
         final all = snap.data!
-            .where((t) => _category == 'All' || t.category == _category)
+            .where
+            ((t) => _category == 'All' || t.category == _category)
             .toList();
         final pending = all.where((t) => !t.isCompleted).toList();
         final doneToday = all.where((t) => t.completedToday).toList();
-        final totalDone = all.where((t) => t.isCompleted).length;
+       final completedAll = all.where((t) => t.isCompleted).toList();
 
         return ListView(
           children: [
@@ -329,7 +400,7 @@ class TasksPageState extends State<TasksPage> {
               _sectionTitle('Selesai hari ini', doneToday.length),
               ...doneToday.map(_taskCard),
             ],
-            _historyCard(totalDone),
+            _historyCard(completedAll),
           ],
         );
       },

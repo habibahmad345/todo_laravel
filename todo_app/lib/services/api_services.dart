@@ -7,6 +7,7 @@ import '../models/task.dart';
 class ApiService {
   static const _json = {'Accept': 'application/json'};
 
+  
   static Future<List<Task>> fetchTasks() async {
     final res = await http.get(Uri.parse('$baseUrl/tasks'), headers: _json);
     if (res.statusCode != 200) {
@@ -20,16 +21,26 @@ class ApiService {
     await http.patch(Uri.parse('$baseUrl/tasks/$id/complete'), headers: _json);
   }
 
-  static Future<void> addTask(String title, int categoryId) async {
-    final today = DateTime.now().toIso8601String().substring(0, 10);
-    await http.post(
-      Uri.parse('$baseUrl/tasks'),
-      headers: {..._json, 'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'title': title,
-        'due_date': today,
-        'category_id': categoryId,
-      }),
-    );
-  }
+static Future<void> addTask({
+  required String title,
+  required DateTime date,
+  String? time, // format "HH:mm"
+  required int categoryId,
+}) async {
+  final d =
+      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  await http.post(
+    Uri.parse('$baseUrl/tasks'),
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: jsonEncode({
+      'title': title,
+      'due_date': d,
+      'reminder_time': time,
+      'category_id': categoryId,
+    }),
+  );
+}
 }

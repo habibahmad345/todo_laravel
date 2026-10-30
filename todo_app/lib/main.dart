@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
-
+import 'services/reminder_services.dart';
 import 'cores/constants.dart';
 import 'features/tugas/tasks_page.dart';
 import 'features/kalender/calender_page.dart';
 import 'features/dashboard/dashboard_page.dart';
 import 'features/menu/menu_page.dart';
+import 'models/task.dart';
+import 'services/api_services.dart';
+
+final navigatorKey = GlobalKey<NavigatorState>();
 
 void main() => runApp(const MyApp());
 
@@ -14,6 +18,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'To-Do List',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(colorSchemeSeed: kBlue, useMaterial3: true),
@@ -39,6 +44,76 @@ class _MainShellState extends State<MainShell> {
     const DashboardPage(),
     const MenuPage(),
   ];
+ // shownext
+ @override
+void initState() {
+  super.initState();
+  ReminderService.start(_onDue);
+}
+
+@override
+void dispose() {
+  ReminderService.stop();
+  super.dispose();
+}
+
+final List<Task> _queue = [];
+bool _showing = false;
+
+void _onDue(Task t) {
+  _queue.add(t);
+  if (!_showing) _showNext();
+}
+
+Future<void> _showNext() async {
+  if (_queue.isEmpty) {
+    _showing = false;
+    return;
+  }
+  final ctx = navigatorKey.currentContext;
+  if (ctx == null) {
+    _showing = false;
+    return;
+  }
+  _showing = true;
+  final t = _queue.removeAt(0);
+
+  ReminderService.startAlarm();
+  final action = await showDialog<String>(
+    context: ctx,
+    barrierDismissible: false,
+    builder: (c) => AlertDialog(
+      icon: const Icon(Icons.alarm, size: 44, color: kBlue),
+      title: const Text('Waktunya!', textAlign: TextAlign.center),
+      content: Text(
+        '${t.title}\n${t.category ?? ''}  •  ⏰ ${t.reminderTime ?? ''}',
+        textAlign: TextAlign.center,
+        style: const TextStyle(fontSize: 16),
+      ),
+      actionsAlignment: MainAxisAlignment.center,
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(c, 'snooze'),
+            child: const Text('Tunda 5 menit')),
+        TextButton(
+            onPressed: () => Navigator.pop(c, 'close'),
+            child: const Text('Tutup')),
+        FilledButton(
+            onPressed: () => Navigator.pop(c, 'done'),
+            child: const Text('Selesai')),
+      ],
+    ),
+  );
+  await ReminderService.stopAlarm();
+
+  if (action == 'done') {
+    await ApiService.completeTask(t.id);
+    _tasksKey.currentState?.reload();
+  } else if (action == 'snooze') {
+    ReminderService.snooze(t.id, 5);
+  }
+  _showNext();
+}
 
   Widget _navItem(IconData icon, String label, int index) {
     final active = _index == index;
